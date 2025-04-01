@@ -1,0 +1,48 @@
+redirectsOrigin = "config"
+plugins = []
+headers = []
+
+[build]
+edge_functions = "/Users/mac/Documents/Novai_/novai_cenyca/project_CENYCA V2/netlify/edge-functions"
+publish = "/Users/mac/Documents/Novai_/novai_cenyca/project_CENYCA V2/dist"
+publishOrigin = "config"
+commandOrigin = "config"
+command = "npm run build"
+
+[build.environment]
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]
+
+[[edge_functions]]
+path = "/api/gemini"
+function = "gemini"
+
+[[edge_functions]]
+path = "/api/finance-bot"
+function = "finance-bot"
+
+[functions]
+
+[functions."*"]
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
