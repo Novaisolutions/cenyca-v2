@@ -20,7 +20,4 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
   external_node_modules = ["formidable", "busboy"]
-  included_files = ["**/*.js"]
-
-[build.environment]
-  NODE_VERSION = "18" 
+  included_files = ["**/*.js"] 

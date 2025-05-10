@@ -1,186 +1,280 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { AnimatePresence } from 'framer-motion';
-import AIAssistant from './components/AIAssistant';
-import FinanceBot from './components/FinanceBot';
-import ImageModal from './components/ImageModal';
+import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { useChatData } from './hooks/useChatData';
 import ChatPanel from './components/ChatPanel';
-import { TourProvider, useTour } from './lib/TourContext';
-import AppTour, { TourButton } from './components/AppTour';
-import TextFormatExample from './components/TextFormatExample';
+import ImageModal from './components/ImageModal';
+import UpdatesPopup from './components/UpdatesPopup';
+import InvoicePopup from './components/InvoicePopup';
+import FinanceBot from './components/FinanceBot';
+import StatsOnlyAssistant from './components/StatsOnlyAssistant';
+import SheetsAssistant from './components/SheetsAssistant';
+import { PanelLeft, BarChart, TrendingUp, X, Calendar, Sheet } from 'lucide-react';
+import Split from 'react-split';
 
-// Componente wrapper para acceder al contexto del tour
-const AppContent = () => {
-  const [conversations, setConversations] = useState([]);
-  const [currentConversation, setCurrentConversation] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [showAI, setShowAI] = useState(true);
-  const [splitMode, setSplitMode] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [assistantMode, setAssistantMode] = useState<'chat' | 'finance'>('chat');
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [messageContentConversations, setMessageContentConversations] = useState([]);
-  const [isSearchingMessages, setIsSearchingMessages] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-  
-  const { showFormatExample } = useTour();
-  
-  // Detectar si el dispositivo es móvil
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    
-    return () => {
-      window.removeEventListener('resize', checkMobile);
-    };
-  }, []);
-
-  // Cargar conversaciones al inicio
-  useEffect(() => {
-    // Simulamos cargar conversaciones desde la base de datos
-    setConversations([
-      {
-        id: 1,
-        nombre_contacto: 'Juan Pérez',
-        numero: '+5215512345678',
-        ultimo_mensaje_resumen: 'Hola, ¿cómo estás?',
-        tiene_no_leidos: true,
-        no_leidos_count: 3
-      },
-      {
-        id: 2,
-        nombre_contacto: 'María González',
-        numero: '+5215587654321',
-        ultimo_mensaje_resumen: '¿Ya recibiste el pago?',
-        tiene_no_leidos: false,
-        no_leidos_count: 0
-      }
-    ]);
-  }, []);
-
-  // Cargar mensajes cuando se selecciona una conversación
-  useEffect(() => {
-    if (currentConversation) {
-      // Simulamos cargar mensajes desde la base de datos
-      setMessages([
-        {
-          id: 1,
-          conversacion_id: currentConversation.id,
-          mensaje: 'Hola, *necesito* información sobre el _curso_ de ~programación~.',
-          tipo: 'entrada',
-          fecha: new Date(2023, 3, 28, 10, 30),
-          leido: true
-        },
-        {
-          id: 2,
-          conversacion_id: currentConversation.id,
-          mensaje: 'Claro, el curso comienza el próximo lunes. ¿Te interesa inscribirte?',
-          tipo: 'salida',
-          fecha: new Date(2023, 3, 28, 10, 32),
-          leido: true
-        },
-        {
-          id: 3,
-          conversacion_id: currentConversation.id,
-          mensaje: 'Sí, ¿cuál es el costo?',
-          tipo: 'entrada',
-          fecha: new Date(),
-          leido: false
-        }
-      ]);
-    }
-  }, [currentConversation]);
-
-  // Filtrar conversaciones por término de búsqueda
-  const filteredConversations = conversations.filter(conv => 
-    conv.nombre_contacto?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    conv.numero?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    messageContentConversations.some(mc => mc.id === conv.id)
-  );
-
-  // Manejar búsqueda en contenido de mensajes
-  useEffect(() => {
-    if (searchTerm.length >= 3) {
-      setIsSearchingMessages(true);
-      
-      // Simulamos búsqueda en el contenido de los mensajes
-      setTimeout(() => {
-        setMessageContentConversations(
-          searchTerm.includes('pago') 
-            ? [{ id: 2 }] 
-            : []
-        );
-        setIsSearchingMessages(false);
-      }, 1000);
+// Componente para el recordatorio de pago
+const PaymentReminderBadge = ({ daysUntilPayment }: { daysUntilPayment: number }) => {
+  // Función para determinar colores según los días restantes
+  const getColorScheme = () => {
+    if (daysUntilPayment <= 2) {
+      return {
+        bg: 'from-red-500/90 to-red-600/80',
+        text: 'text-white',
+        dot: 'bg-white',
+        icon: 'text-red-100'
+      };
+    } else if (daysUntilPayment <= 5) {
+      return {
+        bg: 'from-orange-500/90 to-orange-600/80',
+        text: 'text-white',
+        dot: 'bg-white',
+        icon: 'text-orange-100'
+      };
     } else {
-      setMessageContentConversations([]);
+      return {
+        bg: 'from-amber-500/90 to-amber-600/80',
+        text: 'text-white',
+        dot: 'bg-white',
+        icon: 'text-amber-100'
+      };
     }
-  }, [conversations, searchTerm, messageContentConversations]);
+  };
+
+  const colors = getColorScheme();
 
   return (
-    <>
-      <div className="h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4 md:p-4 p-1">
-        <div className="h-full rounded-2xl overflow-hidden bg-white/70 backdrop-blur-xl border border-white/60 shadow-lg">
-          {/* Panel principal */}
-          <AnimatePresence mode="wait">
-            <ChatPanel
-              conversations={filteredConversations}
-              currentConversation={currentConversation}
-              setCurrentConversation={setCurrentConversation}
-              messages={messages}
-              setMessages={setMessages}
-              searchTerm={searchTerm}
-              onSearchChange={setSearchTerm}
-              isSearchingMessages={isSearchingMessages}
-              isMobile={isMobile}
-              messagesContainerRef={messagesContainerRef}
-              onImageClick={setSelectedImage}
-              splitMode={splitMode}
-              setSplitMode={setSplitMode}
-              showAI={showAI}
-              setShowAI={setShowAI}
-              assistantMode={assistantMode}
-              setAssistantMode={setAssistantMode}
-            />
-          </AnimatePresence>
-
-          {/* Asistente IA / FinanceBot */}
-          <AnimatePresence mode="wait">
-            {showAI && (
-              assistantMode === 'chat' ? (
-                <AIAssistant key="ai" onClose={() => setShowAI(false)} />
-              ) : (
-                <FinanceBot key="finance" onClose={() => setShowAI(false)} />
-              )
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Modal de imágenes */}
-        <ImageModal imageUrl={selectedImage} onClose={() => setSelectedImage(null)} />
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50"
+    >
+      <div className={`flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r ${colors.bg} shadow-lg backdrop-blur-md border border-white/20 ${colors.text} text-sm font-medium`}>
+        <Calendar className={`w-4 h-4 ${colors.icon}`} />
+        <div className={`w-2 h-2 rounded-full ${colors.dot} animate-pulse`} />
+        <span>
+          {daysUntilPayment === 0 
+            ? "¡Hoy es día de pago!" 
+            : daysUntilPayment === 1 
+              ? "¡Mañana es día de pago!" 
+              : `${daysUntilPayment} días para fecha de pago`}
+        </span>
       </div>
-      
-      {/* Ejemplo de formato de texto (mostrado solo durante el tour) */}
-      {showFormatExample && (
-        <div className="fixed bottom-20 right-4 z-50 w-80">
-          <TextFormatExample />
-        </div>
-      )}
-    </>
+    </motion.div>
   );
 };
 
 function App() {
+  const {
+    selectedConversation,
+    messages,
+    searchTerm,
+    filteredConversations,
+    isSearchingMessages,
+    messagesContainerRef,
+    setSelectedConversation,
+    setSearchTerm,
+    loadConversations,
+  } = useChatData();
+
+  const [showAI, setShowAI] = useState(true);
+  const [splitMode, setSplitMode] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [assistantMode, setAssistantMode] = useState<'stats' | 'finance' | 'sheets'>('stats');
+  const [columnSizes, setColumnSizes] = useState([30, 70]);
+  const [showUpdatesPopup, setShowUpdatesPopup] = useState(false);
+  const [showInvoicePopup, setShowInvoicePopup] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [daysUntilPayment, setDaysUntilPayment] = useState<number | null>(null);
+
+  // Lógica para calcular días hasta el pago
+  useEffect(() => {
+    const checkPaymentDate = () => {
+      const today = new Date();
+      const currentMonth = today.getMonth();
+      const currentYear = today.getFullYear();
+
+      // Fecha de pago este mes (día 10)
+      const paymentDate = new Date(currentYear, currentMonth, 10);
+
+      // Si ya pasó el día 10, la próxima fecha de pago es el mes siguiente
+      if (today.getDate() > 10) {
+        paymentDate.setMonth(paymentDate.getMonth() + 1);
+      }
+
+      // Calcular diferencia en días
+      const diffTime = paymentDate.getTime() - today.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      setDaysUntilPayment(diffDays);
+    };
+
+    checkPaymentDate();
+
+    // Verificar diariamente
+    const intervalId = setInterval(checkPaymentDate, 24 * 60 * 60 * 1000);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    const checkIfMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    checkIfMobile();
+    window.addEventListener('resize', checkIfMobile);
+
+    return () => {
+      window.removeEventListener('resize', checkIfMobile);
+    };
+  }, []);
+
+  useEffect(() => {
+    const popupCount = parseInt(localStorage.getItem('updatesPopupCount') || '0', 10);
+    if (popupCount < 10) {
+      setShowUpdatesPopup(true);
+    }
+
+    setShowInvoicePopup(false);
+    localStorage.setItem('invoicePopupState', JSON.stringify({ show: false }));
+
+    const handleShowInvoicePopup = () => {
+      console.log('Popup de factura solicitado pero no mostrado - pago realizado');
+    };
+    
+    window.addEventListener('showInvoicePopup', handleShowInvoicePopup);
+    
+    return () => {
+      window.removeEventListener('showInvoicePopup', handleShowInvoicePopup);
+    };
+  }, []);
+
+  const handleCloseUpdatesPopup = () => {
+    setShowUpdatesPopup(false);
+  };
+
+  const handleCloseInvoicePopup = () => {
+    setShowInvoicePopup(false);
+  };
+
+  if (isMobile) {
+    return <div className="flex justify-center items-center h-screen"><p>Redirigiendo a la versión móvil...</p></div>;
+  }
+
+  // Función para renderizar el componente del asistente correcto
+  const renderAssistantComponent = () => {
+    switch (assistantMode) {
+      case 'stats':
+        return <StatsOnlyAssistant onClose={() => setShowAI(false)} />;
+      case 'finance':
+        return <FinanceBot onClose={() => setShowAI(false)} />;
+      case 'sheets':
+        return <SheetsAssistant onClose={() => setShowAI(false)} />;
+      default:
+        return null;
+    }
+  };
+
   return (
-    <TourProvider>
-      <AppContent />
-      <AppTour />
-      <TourButton />
-    </TourProvider>
+    <div className="h-screen bg-gradient-to-br from-blue-50 via-indigo-50/30 to-purple-50/30 p-3 md:p-5">
+      <div className="h-full rounded-2xl overflow-hidden backdrop-blur-sm border border-white/60 shadow-md" style={{ backgroundColor: 'rgba(255, 255, 255, 0.85)' }}>
+        <Split
+          sizes={columnSizes}
+          minSize={[150, 300]}
+          gutterSize={6}
+          onDragEnd={(sizes) => setColumnSizes(sizes)}
+          className="flex h-full split-wrapper"
+          gutterStyle={() => ({
+            backgroundColor: 'var(--gutter-background)',
+            cursor: 'col-resize'
+          })}
+        >
+          <div className="flex flex-col h-full">
+            <div className="grid grid-cols-3 gap-1 p-1.5 mb-1 bg-blue-50/50 rounded-xl mx-2.5 mt-2.5 border border-blue-100/70">
+              <button 
+                onClick={() => setAssistantMode('stats')}
+                className={`px-2 py-1.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-all ${
+                  assistantMode === 'stats' 
+                    ? 'bg-white shadow-sm text-blue-600' 
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-blue-50/70'
+                }`}
+              >
+                <TrendingUp className="w-3 h-3" />
+                Estadísticas
+              </button>
+              <button 
+                onClick={() => setAssistantMode('finance')}
+                className={`px-2 py-1.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-all ${
+                  assistantMode === 'finance' 
+                    ? 'bg-white shadow-sm text-blue-600' 
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-blue-50/70'
+                }`}
+              >
+                <BarChart className="w-3 h-3" />
+                Conciliación
+              </button>
+              <button 
+                onClick={() => setAssistantMode('sheets')}
+                className={`px-2 py-1.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-all ${
+                  assistantMode === 'sheets' 
+                    ? 'bg-white shadow-sm text-blue-600' 
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-blue-50/70'
+                }`}
+              >
+                <Sheet className="w-3 h-3" />
+                Asistente Sheets
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-hidden">
+              {showAI ? (
+                renderAssistantComponent()
+              ) : (
+                <div className="flex justify-center items-center h-full backdrop-blur-sm">
+                  <motion.button
+                    whileHover={{ scale: 1.05, y: -2 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setShowAI(true)}
+                    className="p-2.5 rounded-xl bg-blue-100/60 backdrop-blur-md hover:bg-blue-200/60 border border-blue-200/60 transition-all shadow-sm panel-button"
+                  >
+                    <PanelLeft className="w-5 h-5 text-blue-600" />
+                  </motion.button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <ChatPanel
+            conversations={filteredConversations}
+            selectedConversation={selectedConversation}
+            messages={messages}
+            searchTerm={searchTerm}
+            splitMode={splitMode}
+            messagesContainerRef={messagesContainerRef}
+            onSearchChange={setSearchTerm}
+            onRefresh={loadConversations}
+            onSplitModeToggle={() => setSplitMode(!splitMode)}
+            onSelectConversation={setSelectedConversation}
+            onImageClick={setSelectedImage}
+            isSearchingMessages={isSearchingMessages}
+            isMobile={false}
+          />
+        </Split>
+      </div>
+
+      <ImageModal imageUrl={selectedImage} onClose={() => setSelectedImage(null)} />
+
+      {showUpdatesPopup && (
+        <UpdatesPopup onClose={handleCloseUpdatesPopup} />
+      )}
+
+      {showInvoicePopup && (
+        <InvoicePopup onClose={handleCloseInvoicePopup} />
+      )}
+
+      {/* Renderizar condicionalmente el aviso de pago */}
+      {daysUntilPayment !== null && daysUntilPayment <= 10 && (
+        <PaymentReminderBadge daysUntilPayment={daysUntilPayment} />
+      )}
+    </div>
   );
 }
 

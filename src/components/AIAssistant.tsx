@@ -13,25 +13,6 @@ interface ChatMessage {
   content: string;
 }
 
-// Función para dar formato tipo WhatsApp a los textos
-const formatWhatsAppStyle = (text: string): string => {
-  if (!text) return '';
-  
-  // Convertir a caracteres Unicode para negrita (*texto*)
-  let formatted = text.replace(/\*(.*?)\*/g, '<strong>$1</strong>');
-  
-  // Convertir a caracteres Unicode para cursiva (_texto_)
-  formatted = formatted.replace(/_(.*?)_/g, '<em>$1</em>');
-  
-  // Convertir a caracteres Unicode para tachado (~texto~)
-  formatted = formatted.replace(/~(.*?)~/g, '<del>$1</del>');
-  
-  // Convertir saltos de línea
-  formatted = formatted.replace(/\n/g, '<br />');
-  
-  return formatted;
-};
-
 const AIAssistant = ({ onClose }: AIAssistantProps) => {
   const [aiMessage, setAiMessage] = useState('');
   const [aiChat, setAiChat] = useState<ChatMessage[]>([
@@ -180,10 +161,9 @@ const AIAssistant = ({ onClose }: AIAssistantProps) => {
 
   return (
     <motion.div 
-      data-tour="asistente-ai"
-      initial={{ x: '100%' }}
-      animate={{ x: 0 }}
-      exit={{ x: '100%' }}
+      initial={{ x: -50, opacity: 0 }}
+      animate={{ x: 0, opacity: 1 }}
+      exit={{ x: -50, opacity: 0 }}
       transition={{ type: "spring", stiffness: 100 }}
       className="h-full flex flex-col p-4 bg-white/60 backdrop-blur-md"
     >
@@ -239,7 +219,7 @@ const AIAssistant = ({ onClose }: AIAssistantProps) => {
                   : 'bg-blue-50/80 border border-blue-100 rounded-tr-none'
               }`}
             >
-              <p className="text-sm text-gray-700" dangerouslySetInnerHTML={{ __html: formatWhatsAppStyle(msg.content) }} />
+              <p className="text-sm text-gray-700">{msg.content}</p>
               {msg.role === 'assistant' && idx === aiChat.length - 1 && isLoading && processingStage === 'generating' && (
                 <div className="mt-1 flex justify-end">
                   <span className="text-xs text-blue-400 animate-pulse">

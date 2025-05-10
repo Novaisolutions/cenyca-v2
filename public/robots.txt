@@ -1,0 +1,14 @@
+# CENYCA Robots.txt
+User-agent: *
+Allow: /
+
+# Sitemap (cuando esté disponible)
+# Sitemap: https://cenyca.netlify.app/sitemap.xml
+
+# No permitir acceso a rutas de funciones de Netlify
+Disallow: /.netlify/functions/
+Disallow: /.netlify/edge-functions/
+
+# No permitir acceso a carpetas privadas
+Disallow: /backups/
+Disallow: /supabase/ 

@@ -1,3 +1,5 @@
+functionsDirectory = "/Users/mac/Documents/Novai_/novai_cenyca/project_CENYCA V2/netlify/functions"
+functionsDirectoryOrigin = "config"
 redirectsOrigin = "config"
 plugins = []
 headers = []
@@ -8,6 +10,7 @@ publish = "/Users/mac/Documents/Novai_/novai_cenyca/project_CENYCA V2/dist"
 publishOrigin = "config"
 commandOrigin = "config"
 command = "npm run build"
+functions = "/Users/mac/Documents/Novai_/novai_cenyca/project_CENYCA V2/netlify/functions"
 
 [build.environment]
 
@@ -27,17 +30,28 @@ command = "npm run build"
 path = "/api/gemini"
 function = "gemini"
 
-[[edge_functions]]
-path = "/api/finance-bot"
-function = "finance-bot"
-
 [functions]
 
 [functions."*"]
+included_files = ["**/*.js"]
+external_node_modules = ["formidable", "busboy"]
+node_bundler = "esbuild"
 
 [[redirects]]
 from = "/*"
 to = "/index.html"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
+
+[[redirects]]
+from = "/api/finance-conciliation"
+to = "/.netlify/functions/finance-conciliation"
 status = 200.0
 force = false
 

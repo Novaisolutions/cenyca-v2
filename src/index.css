@@ -2,22 +2,53 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --app-bg: #fafbff;
+  --card-bg: rgba(255, 255, 255, 0.95);
+  --card-border: rgba(231, 236, 255, 0.6);
+  --primary: #4f77ff;
+  --primary-rgb: 79, 119, 255;
+  --secondary: #6b63ff;
+  --secondary-rgb: 107, 99, 255;
+  --accent: #8a7fff;
+  --accent-rgb: 138, 127, 255;
+  --text-primary: #1c1e2e;
+  --text-secondary: #5d6387;
+  --text-light: #8b90b3;
+  --divider: rgba(231, 236, 255, 0.8);
+  
+  --gutter-background: rgba(231, 236, 255, 0.3);
+  --gutter-size: 6px;
+  --shadow-sm: 0 2px 8px rgba(20, 20, 50, 0.04);
+  --shadow-md: 0 4px 16px rgba(20, 20, 50, 0.06);
+  --shadow-lg: 0 6px 24px rgba(20, 20, 50, 0.08);
+  --transition-default: all 0.2s ease-out;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--text-primary);
+  background-color: var(--app-bg);
+}
+
 .split-wrapper {
-  --gutter-background: rgba(255, 255, 255, 0.1);
-  --gutter-size: 8px;
   height: 100%;
   overflow: hidden;
 }
 
 .gutter {
-  background-color: rgba(220, 220, 250, 0.2);
+  background-color: var(--gutter-background);
   background-repeat: no-repeat;
   background-position: 50%;
-  transition: background-color 0.2s ease;
+  transition: var(--transition-default);
 }
 
 .gutter:hover {
-  background-color: rgba(129, 140, 248, 0.3);
+  background-color: rgba(129, 140, 248, 0.2);
 }
 
 .gutter.gutter-horizontal {
@@ -38,21 +69,21 @@
 }
 
 @keyframes slideIn {
-  from { transform: translateY(20px); opacity: 0; }
+  from { transform: translateY(8px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.3s ease-in-out;
+  animation: fadeIn 0.3s ease-out;
 }
 
 .animate-slide-in {
-  animation: slideIn 0.3s ease-out;
+  animation: slideIn 0.2s ease-out;
 }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -60,33 +91,99 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: rgba(129, 140, 248, 0.3);
-  border-radius: 3px;
+  background-color: rgba(129, 140, 248, 0.2);
+  border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(129, 140, 248, 0.5);
+  background-color: rgba(129, 140, 248, 0.4);
 }
 
 /* Estilos para mejorar el scrolling */
 .overflow-y-auto {
   scrollbar-width: thin;
-  scrollbar-color: rgba(129, 140, 248, 0.3) transparent;
-}
-
-/* Asegurar que el contenedor principal mantenga el scrolling */
-.split-wrapper {
-  height: 100%;
-  overflow: hidden;
+  scrollbar-color: rgba(129, 140, 248, 0.2) transparent;
 }
 
 /* Estilos para los botones de columna cerrada */
 .panel-button {
-  transition: all 0.2s ease-in-out;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  transition: var(--transition-default);
+  box-shadow: var(--shadow-sm);
 }
 
 .panel-button:hover {
-  transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: scale(1.05);
+  box-shadow: var(--shadow-md);
+}
+
+/* Tarjetas minimalistas */
+.card {
+  background-color: var(--card-bg);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--card-border);
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition-default);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+/* Botones principales */
+.btn-primary {
+  background-color: var(--primary);
+  color: white;
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+  transition: var(--transition-default);
+}
+
+.btn-primary:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background-color: rgba(129, 140, 248, 0.1);
+  color: var(--primary);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+  transition: var(--transition-default);
+}
+
+.btn-secondary:hover {
+  background-color: rgba(129, 140, 248, 0.15);
+}
+
+/* Inputs minimalistas */
+.input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--divider);
+  background-color: white;
+  color: var(--text-primary);
+  transition: var(--transition-default);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(79, 119, 255, 0.1);
+}
+
+/* Gradientes modernos */
+.gradient-primary {
+  background-image: linear-gradient(135deg, var(--primary), var(--secondary));
+}
+
+.gradient-subtle {
+  background-image: linear-gradient(135deg, #f8f9ff, #f0f4ff);
+}
+
+/* Sombras de texto */
+.text-shadow-sm {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
