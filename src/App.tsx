@@ -7,8 +7,7 @@ import UpdatesPopup from './components/UpdatesPopup';
 import InvoicePopup from './components/InvoicePopup';
 import FinanceBot from './components/FinanceBot';
 import StatsOnlyAssistant from './components/StatsOnlyAssistant';
-import SheetsAssistant from './components/SheetsAssistant';
-import { PanelLeft, BarChart, TrendingUp, X, Calendar, Sheet, BarChart2 } from 'lucide-react';
+import { PanelLeft, BarChart, TrendingUp, X, Calendar, BarChart2 } from 'lucide-react';
 import Split from 'react-split';
 import { useNavigate } from 'react-router-dom';
 
@@ -80,7 +79,7 @@ function App() {
   const [showAI, setShowAI] = useState(true);
   const [splitMode, setSplitMode] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [assistantMode, setAssistantMode] = useState<'stats' | 'finance' | 'sheets'>('stats');
+  const [assistantMode, setAssistantMode] = useState<'stats' | 'finance'>('stats');
   const [columnSizes, setColumnSizes] = useState([30, 70]);
   const [showUpdatesPopup, setShowUpdatesPopup] = useState(false);
   const [showInvoicePopup, setShowInvoicePopup] = useState(false);
@@ -179,8 +178,6 @@ function App() {
         return <StatsOnlyAssistant onClose={() => setShowAI(false)} />;
       case 'finance':
         return <FinanceBot onClose={() => setShowAI(false)} />;
-      case 'sheets':
-        return <SheetsAssistant onClose={() => setShowAI(false)} />;
       default:
         return null;
     }
@@ -212,7 +209,7 @@ function App() {
           })}
         >
               <div className="flex flex-col h-full">
-            <div className="grid grid-cols-3 gap-1 p-1.5 mb-1 bg-blue-50/50 rounded-xl mx-2.5 mt-2.5 border border-blue-100/70">
+            <div className="grid grid-cols-2 gap-1 p-1.5 mb-1 bg-blue-50/50 rounded-xl mx-2.5 mt-2.5 border border-blue-100/70">
                   <button 
                 onClick={() => setAssistantMode('stats')}
                 className={`px-2 py-1.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-all ${
@@ -235,17 +232,6 @@ function App() {
                 <BarChart className="w-3 h-3" />
                 Conciliación
               </button>
-              <button 
-                onClick={() => setAssistantMode('sheets')}
-                className={`px-2 py-1.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-all ${
-                  assistantMode === 'sheets' 
-                    ? 'bg-white shadow-sm text-blue-600' 
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-blue-50/70'
-                }`}
-              >
-                <Sheet className="w-3 h-3" />
-                Asistente Sheets
-                  </button>
                 </div>
                 
                   <div className="flex-1 overflow-hidden">
