@@ -70,8 +70,8 @@ exports.handler = async (event, context) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid request body' }), headers: { 'Content-Type': 'application/json' } };
   }
 
-  // Ahora esperamos un array de IDs
-  const { sheetIds, userQuery } = body;
+  // Ahora esperamos un array de IDs y el historial de conversación
+  const { sheetIds, userQuery, conversationHistory = [] } = body;
   if (!sheetIds || !Array.isArray(sheetIds) || sheetIds.length === 0 || !userQuery) {
     console.error("Parámetros inválidos o faltantes: sheetIds (array) o userQuery");
     return {
@@ -86,86 +86,130 @@ exports.handler = async (event, context) => {
   try {
     // --- Lógica Principal para Múltiples Hojas --- 
     let combinedData = "";
-    const sheetNamesRead = []; // Para informar a Gemini
+    const sheetsReadInfo = []; // Para informar a Gemini sobre las hojas leídas
     const errorsReading = []; // Para informar al usuario si algo falla
-    const targetSheetName = "mayo25"; // Nombre de la hoja a leer en cada spreadsheet
-    let headers = null; // Para almacenar los encabezados una vez
+    let globalHeaders = null; // Para almacenar los encabezados una vez
 
-    console.log(`Iniciando lectura para ${sheetIds.length} hoja(s)...`);
+    console.log(`Iniciando lectura para ${sheetIds.length} archivo(s)...`);
 
     for (const sheetId of sheetIds) {
       try {
-        const readRange = `${targetSheetName}!A1:M1000`;
-        console.log(`Intentando leer ${sheetId} - Rango: ${readRange}`);
+        // Primero, obtener información sobre todas las hojas en este spreadsheet
+        console.log(`Obteniendo información del spreadsheet ${sheetId}...`);
         
-        const sheetDataResponse = await sheets.spreadsheets.values.get({
+        const spreadsheetInfo = await sheets.spreadsheets.get({
           key: GOOGLE_SHEETS_API_KEY,
           spreadsheetId: sheetId,
-          range: readRange,
         });
         
-        const sheetData = sheetDataResponse.data.values;
+        const sheetNames = spreadsheetInfo.data.sheets.map(sheet => sheet.properties.title);
+        console.log(`Hojas encontradas en ${sheetId}: ${sheetNames.join(', ')}`);
         
-        if (sheetData && sheetData.length > 0) {
-          console.log(`Datos leídos de ${sheetId}: ${sheetData.length} filas`);
-          // Guardar encabezados solo la primera vez
-          if (!headers && sheetData.length > 0) {
-              headers = sheetData[0]; 
+        // Leer cada hoja del spreadsheet
+        for (const sheetName of sheetNames) {
+          try {
+            const readRange = `'${sheetName}'!A1:M1000`; // Usar comillas para manejar nombres con espacios
+            console.log(`Leyendo ${sheetId} - Hoja: ${sheetName}`);
+            
+            const sheetDataResponse = await sheets.spreadsheets.values.get({
+              key: GOOGLE_SHEETS_API_KEY,
+              spreadsheetId: sheetId,
+              range: readRange,
+            });
+            
+            const sheetData = sheetDataResponse.data.values;
+            
+            if (sheetData && sheetData.length > 0) {
+              console.log(`Datos leídos de ${sheetId}/${sheetName}: ${sheetData.length} filas`);
+              
+              // Guardar encabezados solo la primera vez
+              if (!globalHeaders && sheetData.length > 0) {
+                globalHeaders = sheetData[0]; 
+              }
+              
+              const csvData = arrayToCsv(sheetData); // Convierte datos
+              combinedData += `\n--- Archivo: ${sheetId}, Hoja: ${sheetName} ---\n${csvData}\n`;
+              sheetsReadInfo.push({
+                spreadsheetId: sheetId,
+                sheetName: sheetName,
+                rowCount: sheetData.length
+              });
+            } else {
+              console.warn(`No se encontraron datos en ${sheetId}/${sheetName}`);
+            }
+          } catch (sheetError) {
+            console.error(`Error al leer la hoja ${sheetName} del archivo ${sheetId}:`, sheetError);
+            // Continuar con la siguiente hoja si hay un error en una específica
           }
-          const csvData = arrayToCsv(sheetData); // Convierte datos (sin encabezados)
-          combinedData += `\n--- Datos de Spreadsheet ID: ${sheetId} ---\n${csvData}\n`;
-          sheetNamesRead.push(sheetId); // O podríamos obtener el nombre real si tuviéramos permisos
-        } else {
-          console.warn(`No se encontraron datos en ${sheetId} (${targetSheetName})`);
-          errorsReading.push(`No se encontraron datos en la hoja ${targetSheetName} del archivo ${sheetId}.`);
         }
       } catch (sheetsError) {
-        console.error(`Error al leer Google Sheet ID ${sheetId}:`, sheetsError);
+        console.error(`Error al acceder al spreadsheet ${sheetId}:`, sheetsError);
         const details = sheetsError.message.includes('403')
           ? `Verifica permisos para ${sheetId}.`
           : sheetsError.message.includes('404') 
-            ? `No se encontró ${sheetId} o la hoja ${targetSheetName}.`
+            ? `No se encontró el archivo ${sheetId}.`
             : sheetsError.message;
         errorsReading.push(`Error al acceder a ${sheetId}: ${details}`);
       }
     }
 
     if (combinedData.trim() === "") {
-        console.error("No se pudieron leer datos de ninguna hoja seleccionada.", errorsReading);
-        const errorMsg = errorsReading.length > 0 ? errorsReading.join(' ') : 'No se pudieron leer datos de las hojas seleccionadas.';
-        return {
-            statusCode: 500, // O 404 si prefieres
-            body: JSON.stringify({ error: 'Error de Lectura', details: errorMsg }),
-            headers: { 'Content-Type': 'application/json' },
-        };
+      console.error("No se pudieron leer datos de ninguna hoja seleccionada.", errorsReading);
+      const errorMsg = errorsReading.length > 0 ? errorsReading.join(' ') : 'No se pudieron leer datos de las hojas seleccionadas.';
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: 'Error de Lectura', details: errorMsg }),
+        headers: { 'Content-Type': 'application/json' },
+      };
     }
 
     // Limitar datos combinados
-    const MAX_DATA_LENGTH = 60000; // Aumentar un poco para multi-hoja
+    const MAX_DATA_LENGTH = 80000; // Aumentar para acomodar múltiples hojas
     const truncatedData = combinedData.length > MAX_DATA_LENGTH 
-        ? combinedData.substring(0, MAX_DATA_LENGTH) + "\n[...DATOS TRUNCADOS...]" 
-        : combinedData;
+      ? combinedData.substring(0, MAX_DATA_LENGTH) + "\n[...DATOS TRUNCADOS...]" 
+      : combinedData;
     console.log(`Datos combinados formateados para Gemini (longitud: ${truncatedData.length})`);
 
+    // Preparar el historial de conversación para el prompt
+    let conversationContext = "";
+    if (conversationHistory && conversationHistory.length > 0) {
+      conversationContext = "\n\nHistorial de conversación anterior:\n";
+      conversationHistory.forEach((msg, index) => {
+        conversationContext += `${msg.role === 'user' ? 'Usuario' : 'Asistente'}: ${msg.content}\n`;
+      });
+      conversationContext += "\n---\n";
+    }
+
     // Construir el prompt enriquecido
-    const headerString = headers ? headers.join(', ') : "Número de Whatsapp, Nombre, Monto, Clave de Rastreo, Número de referencia, Número de folio, Número de afiliación, Banco Emisor, Fecha de operación, Hora de operación, Concepto, Comentarios del agente, Ws + Fecha+hora del mensaje";
+    const headerString = globalHeaders ? globalHeaders.join(', ') : "Número de Whatsapp, Nombre, Monto, Clave de Rastreo, Número de referencia, Número de folio, Número de afiliación, Banco Emisor, Fecha de operación, Hora de operación, Concepto, Comentarios del agente, Ws + Fecha+hora del mensaje";
+    
+    // Crear resumen de hojas leídas
+    const sheetsReadSummary = sheetsReadInfo.map(info => 
+      `- ${info.sheetName} (${info.rowCount} filas)`
+    ).join('\n');
+    
     const prompt = `
-      Eres un asistente experto en análisis de datos de Google Sheets.
-      Has recibido datos combinados de las siguientes Hojas de Cálculo (identificadas por su ID): ${sheetNamesRead.join(', ')}.
-      Cada hoja tiene la siguiente estructura de columnas (en orden):
+      Eres un asistente experto en análisis de datos de Google Sheets especializado en información financiera.
+      ${conversationContext}
+      Has recibido datos de los siguientes archivos y hojas:
+      ${sheetsReadSummary}
+      
+      Estructura esperada de columnas (puede variar entre hojas):
       ${headerString}
 
-      Analiza TODOS los siguientes datos extraídos de las hojas seleccionadas (formato CSV, separados por '--- Datos de Spreadsheet ID: ... ---'):
+      Datos extraídos (formato CSV, separados por archivo y hoja):
       --- DATOS COMBINADOS ---
       ${truncatedData}
       --- FIN DATOS COMBINADOS ---
 
-      Responde a la siguiente pregunta del usuario de forma clara y concisa, basándote únicamente en los datos proporcionados:
-      "${userQuery}"
+      Responde a la siguiente pregunta del usuario de forma clara y concisa, basándote en los datos proporcionados.
+      Si la pregunta hace referencia a información del historial de conversación, úsalo para dar contexto a tu respuesta.
+      
+      Pregunta del usuario: "${userQuery}"
 
-      ${errorsReading.length > 0 ? `Nota: Hubo problemas al leer algunas hojas: ${errorsReading.join('; ')}` : ''}
+      ${errorsReading.length > 0 ? `Nota: Hubo problemas al leer algunos archivos: ${errorsReading.join('; ')}` : ''}
     `;
-    console.log("Prompt enriquecido construido para Gemini.");
+    console.log("Prompt enriquecido construido para Gemini con historial de conversación.");
 
     // Llamar a Gemini
     console.log("Enviando solicitud a Gemini API...");
@@ -184,7 +228,10 @@ exports.handler = async (event, context) => {
     console.log("Enviando respuesta exitosa al cliente.");
     return {
       statusCode: 200,
-      body: JSON.stringify({ response: text }),
+      body: JSON.stringify({ 
+        response: text,
+        sheetsRead: sheetsReadInfo // Información sobre qué hojas se leyeron
+      }),
       headers: { 'Content-Type': 'application/json' },
     };
 

@@ -1,9 +1,21 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Sheet, Send, Loader, AlertCircle, CheckSquare, Square } from 'lucide-react';
+import { X, Sheet, Send, Loader, AlertCircle, CheckSquare, Square, MessageSquare, Trash2 } from 'lucide-react';
 
 interface SheetsAssistantProps {
   onClose: () => void;
+}
+
+// Tipo para mensajes de conversación
+interface ConversationMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+  sheetsRead?: Array<{
+    spreadsheetId: string;
+    sheetName: string;
+    rowCount: number;
+  }>;
 }
 
 // Opciones para el selector de hojas
@@ -19,7 +31,7 @@ const SheetsAssistant = ({ onClose }: SheetsAssistantProps) => {
   // Estado para IDs de hojas seleccionadas (array)
   const [selectedSheetIds, setSelectedSheetIds] = useState<string[]>([sheetOptions[0].id]); 
   const [query, setQuery] = useState<string>('');
-  const [response, setResponse] = useState<string>('');
+  const [conversation, setConversation] = useState<ConversationMessage[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
 
@@ -42,7 +54,14 @@ const SheetsAssistant = ({ onClose }: SheetsAssistantProps) => {
 
     setIsLoading(true);
     setError('');
-    setResponse('');
+
+    // Agregar la pregunta del usuario a la conversación
+    const userMessage: ConversationMessage = {
+      role: 'user',
+      content: query,
+      timestamp: new Date()
+    };
+    setConversation([...conversation, userMessage]);
 
     // Obtener nombres de las hojas seleccionadas para logs/mensajes
     const selectedSheetNames = sheetOptions
@@ -52,14 +71,24 @@ const SheetsAssistant = ({ onClose }: SheetsAssistantProps) => {
     console.log(`Enviando consulta: "${query}" para Hojas: [${selectedSheetNames}] (IDs: ${selectedSheetIds.join(', ')})`);
 
     try {
-      // Llamar a la Netlify Function con el array de IDs
+      // Preparar el historial de conversación para enviar (sin el mensaje actual)
+      const conversationHistory = conversation.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+
+      // Llamar a la Netlify Function con el array de IDs y el historial
       const backendResponse = await fetch('/.netlify/functions/sheets-assistant', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        // Enviar el array de IDs
-        body: JSON.stringify({ sheetIds: selectedSheetIds, userQuery: query }), 
+        // Enviar el array de IDs y el historial de conversación
+        body: JSON.stringify({ 
+          sheetIds: selectedSheetIds, 
+          userQuery: query,
+          conversationHistory: conversationHistory
+        }), 
       });
 
       console.log("Respuesta del backend recibida, estado:", backendResponse.status);
@@ -78,7 +107,16 @@ const SheetsAssistant = ({ onClose }: SheetsAssistantProps) => {
 
       const data = await backendResponse.json();
       console.log("Datos de respuesta del backend:", data);
-      setResponse(data.response);
+
+      // Agregar la respuesta del asistente a la conversación
+      const assistantMessage: ConversationMessage = {
+        role: 'assistant',
+        content: data.response,
+        timestamp: new Date(),
+        sheetsRead: data.sheetsRead
+      };
+      setConversation(prev => [...prev, assistantMessage]);
+      setQuery(''); // Limpiar el input
 
     } catch (err: any) {
       console.error("Error en handleQuery:", err);
@@ -86,6 +124,19 @@ const SheetsAssistant = ({ onClose }: SheetsAssistantProps) => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Función para limpiar la conversación
+  const clearConversation = () => {
+    setConversation([]);
+    setQuery('');
+    setError('');
+  };
+
+  // Función para obtener el nombre de la hoja por ID
+  const getSheetNameById = (id: string) => {
+    const sheet = sheetOptions.find(option => option.id === id);
+    return sheet ? sheet.name : 'Desconocido';
   };
 
   return (
@@ -97,7 +148,7 @@ const SheetsAssistant = ({ onClose }: SheetsAssistantProps) => {
       className="h-full flex flex-col p-5 bg-gradient-to-br from-blue-50/30 via-indigo-50/20 to-white/80 backdrop-blur-sm"
     >
       {/* Encabezado */}
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-4">
         <motion.div
           initial={{ y: -5, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -107,18 +158,31 @@ const SheetsAssistant = ({ onClose }: SheetsAssistantProps) => {
           <Sheet className="w-4 h-4 text-indigo-500/80" />
           <h3 className="font-medium text-gray-700/90 text-sm tracking-wide">Asistente Sheets</h3>
         </motion.div>
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={onClose}
-          className="w-6 h-6 flex items-center justify-center rounded-full bg-white/50 backdrop-blur-sm border border-white/40 text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          <X className="w-3 h-3" />
-        </motion.button>
+        <div className="flex items-center gap-2">
+          {conversation.length > 0 && (
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={clearConversation}
+              className="px-2 py-1 text-xs rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors flex items-center gap-1"
+            >
+              <Trash2 className="w-3 h-3" />
+              Limpiar
+            </motion.button>
+          )}
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={onClose}
+            className="w-6 h-6 flex items-center justify-center rounded-full bg-white/50 backdrop-blur-sm border border-white/40 text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <X className="w-3 h-3" />
+          </motion.button>
+        </div>
       </div>
 
       {/* Cuerpo Principal */}
-      <div className="flex-1 flex flex-col overflow-hidden space-y-4">
+      <div className="flex-1 flex flex-col overflow-hidden space-y-3">
         {/* Selector de Hojas (Checkboxes) */}
         <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }}>
           <label className="block text-xs font-medium text-gray-600/80 mb-2">
@@ -141,39 +205,72 @@ const SheetsAssistant = ({ onClose }: SheetsAssistantProps) => {
                 ) : (
                   <Square className="w-4 h-4 flex-shrink-0 text-gray-300" />
                 )}
-                <span className="truncate">{option.name}</span>
+                <span className="truncate text-xs">{option.name}</span>
               </motion.button>
             ))}
           </div>
         </motion.div>
 
-        {/* Área de Respuesta */}
+        {/* Área de Conversación */}
         <motion.div
           initial={{ y: 10, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.3 }}
-          className="flex-1 overflow-y-auto p-4 rounded-xl bg-white/50 backdrop-blur-sm border border-white/50 shadow-inner min-h-[150px] text-sm text-gray-700/90 flex items-center justify-center"
+          className="flex-1 overflow-y-auto p-4 rounded-xl bg-white/50 backdrop-blur-sm border border-white/50 shadow-inner"
         >
-          {isLoading ? (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-              className="flex flex-col items-center gap-2 text-indigo-500"
-            >
-              <Loader className="w-5 h-5 animate-spin" />
-              <span className="text-xs">Consultando asistente...</span>
-            </motion.div>
-          ) : error ? (
-            <div className="text-center text-red-600/90">
-              <AlertCircle className="w-6 h-6 mx-auto mb-2" />
+          {error && (
+            <div className="text-center text-red-600/90 mb-4">
+              <AlertCircle className="w-5 h-5 mx-auto mb-2" />
               <p className="text-xs font-medium">Error:</p>
               <p className="text-xs">{error}</p>
             </div>
-          ) : response ? (
-            <p className="whitespace-pre-wrap">{response}</p>
+          )}
+          
+          {conversation.length === 0 && !error ? (
+            <div className="text-gray-400/80 text-xs text-center">
+              <MessageSquare className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+              <p>Selecciona una o más hojas y haz una pregunta sobre los datos.</p>
+              <p className="mt-2 text-[10px]">Se leerán todas las pestañas de los archivos seleccionados.</p>
+            </div>
           ) : (
-            <p className="text-gray-400/80 text-xs text-center">
-              Selecciona una o más hojas, escribe tu consulta y presiona "Consultar".
-            </p>
+            <div className="space-y-3">
+              {conversation.map((msg, index) => (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div className={`max-w-[85%] rounded-lg p-3 ${
+                    msg.role === 'user' 
+                      ? 'bg-indigo-500 text-white' 
+                      : 'bg-gray-100 text-gray-700'
+                  }`}>
+                    <p className="text-xs whitespace-pre-wrap">{msg.content}</p>
+                    {msg.sheetsRead && msg.sheetsRead.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-gray-200 text-[10px] opacity-70">
+                        <p className="font-medium mb-1">Hojas leídas:</p>
+                        {msg.sheetsRead.map((sheet, idx) => (
+                          <p key={idx}>• {sheet.sheetName} ({sheet.rowCount} filas)</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
+              {isLoading && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex justify-start"
+                >
+                  <div className="bg-gray-100 rounded-lg p-3 flex items-center gap-2">
+                    <Loader className="w-4 h-4 animate-spin text-indigo-500" />
+                    <span className="text-xs text-gray-600">Analizando datos...</span>
+                  </div>
+                </motion.div>
+              )}
+            </div>
           )}
         </motion.div>
 
@@ -189,7 +286,7 @@ const SheetsAssistant = ({ onClose }: SheetsAssistantProps) => {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleQuery()}
-            placeholder="Ej: ¿Comparar montos Otay y Palmas este mes?"
+            placeholder="Ej: ¿Cuál es el total de montos en junio?"
             disabled={isLoading}
             className={`flex-1 px-4 py-2 rounded-xl bg-white/80 backdrop-blur-md border border-white/70 focus:outline-none focus:ring-2 focus:ring-indigo-300 text-sm transition-all duration-200 text-gray-700 placeholder-gray-400/70 shadow-sm ${isLoading ? 'opacity-70' : ''}`}
           />
