@@ -125,12 +125,12 @@ const googleSheetsLinks = [
 ];
 
 // Componente para los botones de acción (actualizado con menú desplegable)
-const ActionButtons = memo(({
-  onRefresh,
-  onSplitModeToggle,
-}: {
-  onRefresh: () => void,
-  onSplitModeToggle: () => void,
+const ActionButtons = memo(({ 
+  onRefresh, 
+  onSplitModeToggle, 
+}: { 
+  onRefresh: () => void, 
+  onSplitModeToggle: () => void, 
 }) => {
   return (
     <div className="flex gap-2">
@@ -222,7 +222,7 @@ const ChatPanel = memo(({
     const intervalId = setInterval(handleAutoRefresh, 5 * 60 * 1000); 
     return () => clearInterval(intervalId);
   }, [handleAutoRefresh]);
-  
+
   // Memoizar el callback para seleccionar conversación nula
   const handleBackToList = useCallback(() => {
     onSelectConversation(null);

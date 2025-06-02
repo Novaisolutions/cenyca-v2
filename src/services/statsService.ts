@@ -29,7 +29,7 @@ interface EventoRecord {
 }
 
 // Valor fijo para total de capturas de datos
-const totalDataCaptures = 719; // Actualizado a 719 (336 + 383) según requerimiento
+const totalDataCaptures = 1081; // Actualizado a 1081 (719 + 362) según requerimiento
 
 /**
  * Verifica si se alcanzó el límite mensual de conciliaciones.
@@ -50,6 +50,10 @@ export const checkConciliationLimit = async (): Promise<boolean> => {
       .lte('updated_at', new Date(currentYear, currentMonth, 0).toISOString());
     
     if (error) {
+      // Manejar el error silenciosamente si es por la tabla que no existe
+      if (error.code === '42P01' && error.message.includes('eventos')) {
+        return false; // Suponemos que no se ha alcanzado el límite
+      }
       console.error('Error al verificar límite de conciliaciones:', error);
       return false; // Asumimos que no se ha alcanzado el límite en caso de error
     }
@@ -71,6 +75,10 @@ export const checkConciliationLimit = async (): Promise<boolean> => {
     // Devolvemos true si se ha alcanzado o superado el límite
     return totalMonthly >= MONTHLY_CONCILIATION_LIMIT;
   } catch (error) {
+    // Evitar logging si es por tabla inexistente
+    if (error && typeof error === 'object' && 'code' in error && error.code === '42P01') {
+      return false;
+    }
     console.error('Error al verificar límite de conciliaciones:', error);
     return false; // Asumimos que no se ha alcanzado el límite en caso de error
   }
@@ -159,7 +167,7 @@ const formatTimeSaved = (minutes: number): string => {
  */
 export const getAutomationStats = async (): Promise<AutomationStats> => {
   try {
-    // Obtener cantidad total de mensajes (puede ser usado para contexto o verificaciones)
+    // Obtener cantidad total de mensajes
     const { data: mensajesData, error: mensajesError } = await supabase
       .from('mensajes')
       .select('count', { count: 'exact', head: true });
@@ -167,134 +175,189 @@ export const getAutomationStats = async (): Promise<AutomationStats> => {
     if (mensajesError) {
       console.error('Error obteniendo total de mensajes:', mensajesError);
     }
-    // const totalMessagesCountGlobal = mensajesData?.count || 0; // Disponible si se necesita
 
-    // Obtener el último ID de mensajes para el fallback de mensajes automatizados
+    const totalMessages = mensajesData?.count || 0;
+    
+    // Obtener el último ID de mensajes para calcular mensajes automatizados
     const { data: lastMessageData, error: lastMessageError } = await supabase
       .from('mensajes')
       .select('id')
       .order('id', { ascending: false })
       .limit(1);
-
-    const lastMessageId = lastMessageData && lastMessageData.length > 0 ? lastMessageData[0].id : 0;
-    const fallbackAutomatedMessages = Math.floor(lastMessageId / 2); // Fallback original
-
-    // Nueva lógica para obtener finalAutomatedMessages (conteo directo o fallback)
-    let finalAutomatedMessages = fallbackAutomatedMessages; 
-    try {
-      const { count, error: automatedError } = await supabase
-        .from('mensajes')
-        .select('*', { count: 'exact', head: true })
-        .eq('tipo', 'enviado')
-        .eq('nombre', 'Sistema');
-
-      if (!automatedError && count !== null) {
-        finalAutomatedMessages = count;
-      } else {
-        // Si hay error o count es null, ya se está usando fallbackAutomatedMessages
-        if (automatedError) console.warn('Error al obtener mensajes automatizados (tipo:enviado, nombre:Sistema), usando fallback:', automatedError.message);
-        else console.warn('No se obtuvo conteo de mensajes automatizados (tipo:enviado, nombre:Sistema), usando fallback.');
-      }
-    } catch (e: any) {
-      console.error('Excepción al obtener mensajes automatizados (tipo:enviado, nombre:Sistema):', e.message);
-      // Ya se está usando fallbackAutomatedMessages
-    }
     
-    // Obtener el contador de conciliaciones totales (lógica original)
+    // Calcular total de mensajes automatizados (último ID / 2)
+    const lastMessageId = lastMessageData && lastMessageData.length > 0 ? lastMessageData[0].id : 0;
+    const totalAutomatedMessages = Math.floor(lastMessageId / 2);
+    
+    // Obtener el contador de conciliaciones (de una tabla de eventos)
     let totalConciliations = 0;
+    let conciliationError = false;
     try {
-      const { data: conciliationData, error: conciliationError } = await supabase
+      // Evitamos el log excesivo sobre la consulta de conciliaciones
+      
+      const { data: conciliationData, error: conciliationErr } = await supabase
         .from('eventos')
         .select('count, updated_at')
         .eq('tipo', 'conciliacion')
         .order('updated_at', { ascending: false })
         .limit(1);
-      if (conciliationError) { /* ... manejo de error original ... */ 
-        console.error('Error al obtener conciliaciones:', conciliationError);
-        // Fallback o manejo como estaba antes
-        const { count: fallbackCount } = await supabase.from('eventos').select('*', { count: 'exact', head: true }).eq('tipo', 'conciliacion_mensual');
-        if (fallbackCount && fallbackCount > 0) totalConciliations = fallbackCount * 3; // Estimación si la principal falla
-      } else if (conciliationData && conciliationData.length > 0) {
-        totalConciliations = conciliationData[0].count;
+      
+      if (conciliationErr) {
+        conciliationError = true;
+        // Si el error es porque la tabla no existe, lo manejamos silenciosamente
+        if (conciliationErr.code !== '42P01') {
+          console.error('Error al obtener conciliaciones:', conciliationErr);
+        }
+        
+        // Verificamos silenciosamente si la tabla existe
+        try {
+          const { count } = await supabase
+            .from('eventos')
+            .select('*', { count: 'exact', head: true });
+          
+          // Solo registramos este mensaje si la tabla existe pero hay otro error
+          if (conciliationErr.code !== '42P01') {
+            console.log('Tabla eventos existe, registros totales:', count);
+            console.log('El error previo no fue por tabla inexistente sino por otro motivo');
+          }
+        } catch (tableError) {
+          // No necesitamos reportar este error, ya sabemos que la tabla no existe
+        }
       }
-    } catch (conciliationIssue) { /* ... manejo de error original ... */ 
-      console.error('Excepción al consultar conciliaciones:', conciliationIssue);
+      
+      if (conciliationData && conciliationData.length > 0) {
+        totalConciliations = conciliationData[0].count;
+      } else if (conciliationError) {
+        // Si no hay datos y hubo un error, verificamos silenciosamente si hay conciliaciones mensuales
+        try {
+          const { count } = await supabase
+            .from('eventos')
+            .select('*', { count: 'exact', head: true })
+            .eq('tipo', 'conciliacion_mensual') as { count: number | null; data: any[] };
+          
+          if (count && count > 0) {
+            // Si hay conciliaciones mensuales pero no globales, estimamos
+            totalConciliations = count * 3; // Estimación conservadora
+          }
+        } catch (countError) {
+          // Si hay un error, simplemente usamos el valor por defecto
+        }
+      }
+    } catch (conciliationIssue) {
+      // Solo registramos el error si no es por la tabla inexistente
+      if (typeof conciliationIssue === 'object' && conciliationIssue && 'code' in conciliationIssue && conciliationIssue.code !== '42P01') {
+        console.error('Excepción al consultar conciliaciones:', conciliationIssue);
+      }
+      // No propagamos el error para que no afecte al resto de estadísticas
     }
-
-    // totalDataCaptures es un valor fijo
-    // const totalDataCaptures = 719; // Ya está definido globalmente
-
-    // Lógica de conciliaciones mensuales (lógica original)
-    let monthlyConciliationsUsed = 0;
-    const currentDate = new Date();
-    const currentMonth = currentDate.getMonth() + 1;
-    const currentYear = currentDate.getFullYear();
+    
+    // Obtener mensajes automatizados (mensajes enviados por el sistema)
+    let automatedMessages = 0;
     try {
-        const { data, error } = await supabase
+      const { data, count, error: automatedError } = await supabase
+        .from('mensajes')
+        .select('*', { count: 'exact', head: true })
+        .eq('tipo', 'enviado')
+        .eq('nombre', 'Sistema');
+      
+      if (!automatedError && count !== null) {
+        automatedMessages = count;
+      } else {
+        // Si hay error en esta consulta, usamos una estimación basada en el total
+        automatedMessages = Math.floor(totalMessages * 0.35);
+      }
+    } catch (error) {
+      // Usar estimación en caso de error
+      automatedMessages = Math.floor(totalMessages * 0.35);
+    }
+    
+    // Calcular mensajes pendientes (no automatizados)
+    const pendingMessages = Math.max(0, totalMessages - automatedMessages);
+    
+    // Calcular tiempo ahorrado (17 segundos por mensaje automatizado, 5 minutos por dato capturado, 75 minutos por conciliación)
+    const timeSavedMessages = (automatedMessages * 17) / 60; // Convertir a minutos
+    const timeSavedCaptures = totalDataCaptures * 5; // Ya en minutos
+    const timeSavedConciliations = totalConciliations * 75; // Ya en minutos
+    const totalTimeSaved = timeSavedMessages + timeSavedCaptures + timeSavedConciliations;
+    
+    // Calcular porcentaje de automatización
+    const savingsPercentage = totalMessages > 0 
+      ? Math.round((automatedMessages / totalMessages) * 100) 
+      : 0;
+      
+    // Verificar límite mensual para conciliaciones
+    let isLimitReached = false;
+    let monthlyUsed = 0;
+    try {
+      isLimitReached = await checkConciliationLimit();
+      
+      // Obtener conciliaciones usadas este mes
+      const currentDate = new Date();
+      const currentMonth = currentDate.getMonth() + 1;
+      const currentYear = currentDate.getFullYear();
+      
+      const { data: monthlyData, error: monthlyError } = await supabase
         .from('eventos')
         .select('count')
         .eq('tipo', 'conciliacion_mensual')
         .gte('updated_at', new Date(currentYear, currentMonth - 1, 1).toISOString())
         .lte('updated_at', new Date(currentYear, currentMonth, 0).toISOString());
-        if (error) { /* ... */ }
-        else if (data) {
-            monthlyConciliationsUsed = data.reduce((sum, record) => sum + (Number(record.count) || 0), 0);
-        }
-    } catch (error) { /* ... */ }
-    const monthlyConciliationsRemaining = MONTHLY_CONCILIATION_LIMIT - monthlyConciliationsUsed;
-    const isMonthlyLimitReached = monthlyConciliationsUsed >= MONTHLY_CONCILIATION_LIMIT;
-
-    // --- AJUSTE EN CÁLCULOS PRINCIPALES USANDO finalAutomatedMessages ---
-    const totalTrackedInteractions = finalAutomatedMessages + totalConciliations + totalDataCaptures;
-    const automatedTrackedInteractions = finalAutomatedMessages + totalConciliations + totalDataCaptures;
-    const pendingInteractions = 0; // No tenemos métrica para esto
-
-    const timeSavedPerMessage = 1.5; 
-    const timeSavedPerConciliation = 75;
-    const timeSavedPerDataCapture = 5; 
-
-    const timeSaved = 
-      (finalAutomatedMessages * timeSavedPerMessage) + 
-      (totalConciliations * timeSavedPerConciliation) +
-      (totalDataCaptures * timeSavedPerDataCapture);
-
-    const savingsPercentage = totalTrackedInteractions > 0 
-      ? Math.round((automatedTrackedInteractions / totalTrackedInteractions) * 100) 
-      : 0;
-    
-    // Lógica de recordatorio de pago (lógica original)
-    const today = new Date();
-    const dayOfMonth = today.getDate();
-    const paymentDay = 10;
-    let daysUntilPayment = paymentDay - dayOfMonth;
-    if (daysUntilPayment < 0) {
-        const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-        daysUntilPayment = daysInMonth - dayOfMonth + paymentDay;
+        
+      if (!monthlyError && monthlyData && monthlyData.length > 0) {
+        // Sumamos todas las conciliaciones mensuales
+        monthlyUsed = monthlyData.reduce((sum, record) => {
+          const count = typeof record === 'object' && record !== null && 'count' in record 
+            ? Number(record.count) || 0 
+            : 0;
+          return sum + count;
+        }, 0);
+      }
+    } catch (error) {
+      // Manejar el error silenciosamente
+      if (typeof error === 'object' && error && 'code' in error && error.code !== '42P01') {
+        console.error('Error al verificar conciliaciones mensuales:', error);
+      }
     }
-    const nextPaymentReminder = daysUntilPayment <= 10 && daysUntilPayment > 0;
-
+    
+    // Recordatorio de pago
+    // El primer día de cada mes se recordará renovar la suscripción
+    const currentDate = new Date();
+    const dayOfMonth = currentDate.getDate();
+    const nextPaymentReminder = dayOfMonth === 1 || dayOfMonth === 2;
+    
+    // Estructura de resultado
     return {
-      total: totalTrackedInteractions,
-      automated: automatedTrackedInteractions,
-      pending: pendingInteractions,
-      totalMessages: finalAutomatedMessages, // <--- CAMBIO PRINCIPAL AQUÍ
+      total: totalMessages,
+      automated: automatedMessages,
+      pending: pendingMessages,
+      totalMessages,
       totalConciliations,
       totalDataCaptures,
-      timeSaved,
+      timeSaved: totalTimeSaved,
       savingsPercentage,
       monthlyLimit: MONTHLY_CONCILIATION_LIMIT,
-      monthlyUsed: monthlyConciliationsUsed,
-      monthlyRemaining: monthlyConciliationsRemaining < 0 ? 0 : monthlyConciliationsRemaining,
-      isLimitReached: isMonthlyLimitReached,
+      monthlyUsed,
+      monthlyRemaining: Math.max(0, MONTHLY_CONCILIATION_LIMIT - monthlyUsed),
+      isLimitReached,
       nextPaymentReminder
     };
   } catch (error) {
-    console.error('Error general obteniendo estadísticas de automatización:', error);
-    return { /* ...valores por defecto en caso de error mayor... */ 
-      total: 0, automated: 0, pending: 0, totalMessages: 0,
-      totalConciliations: 0, totalDataCaptures: totalDataCaptures, timeSaved: 0,
-      savingsPercentage: 0, monthlyLimit: MONTHLY_CONCILIATION_LIMIT, monthlyUsed: 0,
-      monthlyRemaining: MONTHLY_CONCILIATION_LIMIT, isLimitReached: false, nextPaymentReminder: false
+    console.error('Error obteniendo estadísticas de automatización:', error);
+    // En caso de error, devolvemos valores por defecto
+    return {
+      total: 0,
+      automated: 0,
+      pending: 0,
+      totalMessages: 0,
+      totalConciliations: 0,
+      totalDataCaptures: totalDataCaptures,
+      timeSaved: 0,
+      savingsPercentage: 0,
+      monthlyLimit: MONTHLY_CONCILIATION_LIMIT,
+      monthlyUsed: 0,
+      monthlyRemaining: MONTHLY_CONCILIATION_LIMIT,
+      isLimitReached: false,
+      nextPaymentReminder: false
     };
   }
 };

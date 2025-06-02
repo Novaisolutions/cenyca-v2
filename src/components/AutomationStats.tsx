@@ -192,6 +192,11 @@ const AutomationStatsCard = memo(() => {
   });
   
   const [loading, setLoading] = useState(true);
+  const [realTimeMessages, setRealTimeMessages] = useState({
+    total: 0,
+    sent: 0,
+    received: 0
+  });
 
   // Función para cargar estadísticas (memoizada)
   const loadStats = useCallback(async () => {
@@ -204,18 +209,26 @@ const AutomationStatsCard = memo(() => {
         { count: unreadCount }, 
         { count: readCount }, 
         { count: sentCount }, 
-        { count: receivedCount }
+        { count: receivedCount },
+        { count: totalCount }
       ] = await Promise.all([
         supabase.from('mensajes').select('*', { count: 'exact', head: true }).eq('leido', false),
         supabase.from('mensajes').select('*', { count: 'exact', head: true }).eq('leido', true),
         supabase.from('mensajes').select('*', { count: 'exact', head: true }).eq('tipo', 'enviado'),
-        supabase.from('mensajes').select('*', { count: 'exact', head: true }).eq('tipo', 'recibido')
+        supabase.from('mensajes').select('*', { count: 'exact', head: true }).eq('tipo', 'recibido'),
+        supabase.from('mensajes').select('*', { count: 'exact', head: true })
       ]);
       
       setStats({
         ...basicStats,
         read: readCount || 0,
         unread: unreadCount || 0,
+        sent: sentCount || 0,
+        received: receivedCount || 0
+      });
+
+      setRealTimeMessages({
+        total: totalCount || 0,
         sent: sentCount || 0,
         received: receivedCount || 0
       });
@@ -226,9 +239,40 @@ const AutomationStatsCard = memo(() => {
     }
   }, []);
 
-  // Efecto para cargar estadísticas una sola vez
+  // Efecto para establecer la suscripción en tiempo real a la tabla de mensajes
   useEffect(() => {
     loadStats();
+
+    // Configuramos la suscripción a la tabla mensajes para actualizaciones en tiempo real
+    const subscription = supabase
+      .channel('mensajes-changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'mensajes' }, 
+        async () => {
+          // Cuando hay cualquier cambio en la tabla mensajes, actualizamos los contadores
+          const [
+            { count: sentCount }, 
+            { count: receivedCount },
+            { count: totalCount }
+          ] = await Promise.all([
+            supabase.from('mensajes').select('*', { count: 'exact', head: true }).eq('tipo', 'enviado'),
+            supabase.from('mensajes').select('*', { count: 'exact', head: true }).eq('tipo', 'recibido'),
+            supabase.from('mensajes').select('*', { count: 'exact', head: true })
+          ]);
+
+          setRealTimeMessages({
+            total: totalCount || 0,
+            sent: sentCount || 0,
+            received: receivedCount || 0
+          });
+        }
+      )
+      .subscribe();
+
+    // Limpieza de la suscripción al desmontar el componente
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [loadStats]);
 
   // Valores memoizados
@@ -263,8 +307,8 @@ const AutomationStatsCard = memo(() => {
           <MetricCard 
             icon={<MessageSquare />}
             label="Mensajes"
-            value={stats.totalMessages}
-            subtext="17s por mensaje"
+            value={realTimeMessages.total}
+            subtext={`${realTimeMessages.received} recibidos, ${realTimeMessages.sent} enviados`}
             iconColor="var(--primary)"
           />
           
@@ -305,7 +349,7 @@ const AutomationStatsCard = memo(() => {
     );
   }, [
     loading, 
-    stats.totalMessages, 
+    realTimeMessages,
     stats.totalDataCaptures, 
     stats.totalConciliations, 
     stats.monthlyRemaining, 

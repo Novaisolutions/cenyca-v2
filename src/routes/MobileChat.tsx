@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Home, RefreshCcw, Phone } from 'lucide-react';
+import { Home, RefreshCcw, Phone, BarChart2 } from 'lucide-react';
 import { useChatData } from '../hooks/useChatData';
 import ChatPanel from '../components/ChatPanel';
 import ImageModal from '../components/ImageModal';
@@ -45,6 +45,11 @@ const MobileChat = () => {
   const goToHome = () => {
     navigate('/');
   };
+  
+  // Función para ir a la página de estadísticas
+  const goToStats = () => {
+    navigate('/estadisticas');
+  };
 
   return (
     <div className="h-[100vh] w-full flex flex-col bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
@@ -65,6 +70,13 @@ const MobileChat = () => {
             className="p-2 rounded-lg bg-blue-50 text-blue-600"
           >
             <RefreshCcw size={20} />
+          </button>
+          <button 
+            onClick={goToStats}
+            className="p-2 rounded-lg bg-blue-50 text-blue-600"
+            title="Ver estadísticas"
+          >
+            <BarChart2 size={20} />
           </button>
           <a 
             href="tel:+34000000000"

@@ -95,13 +95,13 @@ const FinanceBot = ({ onClose }: FinanceBotProps) => {
     const checkLimit = async () => {
       try {
         const limitInfo = await getConciliationLimitInfo();
-        setMonthlyLimit(limitInfo);
+      setMonthlyLimit(limitInfo);
 
-        // Si ya se alcanzó el límite, mostrar advertencia
-        if (limitInfo.isLimitReached) {
-          setErrorMessage('Has alcanzado el límite mensual de conciliaciones');
-          setErrorDetail('Solo puedes realizar 10 conciliaciones por mes. El contador se reiniciará el próximo mes.');
-          setErrorType('limit');
+      // Si ya se alcanzó el límite, mostrar advertencia
+      if (limitInfo.isLimitReached) {
+        setErrorMessage('Has alcanzado el límite mensual de conciliaciones');
+        setErrorDetail('Solo puedes realizar 10 conciliaciones por mes. El contador se reiniciará el próximo mes.');
+        setErrorType('limit');
         }
       } catch (error) {
         console.error('Error al verificar límite:', error);
