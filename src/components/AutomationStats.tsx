@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { motion } from 'framer-motion';
 import { ClockIcon, MessageSquare, Database, Calculator, AlertCircle, Bell, Info } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../supabaseClient';
 import { getAutomationStats } from '../services/statsService';
 import React from 'react';
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Clock, MessageSquare, Database, Home, RefreshCcw } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../supabaseClient';
 
 // Valores constantes
 const SEGUNDOS_POR_MENSAJE = 10;
@@ -64,7 +64,12 @@ const EstadisticasPage = () => {
       }
       
       if (mensajesData && mensajesData.length > 0) {
-        const ultimoId = mensajesData[0].id;
+        const ultimoId = parseInt(mensajesData[0].id, 10);
+        if (isNaN(ultimoId)) {
+          console.error('El último ID no es un número válido:', mensajesData[0].id);
+          setLoading(false);
+          return;
+        }
         
         // 2. Calcular mensajes automatizados (ID / 2)
         const mensajesAutomatizados = Math.floor(ultimoId / 2);

@@ -1,145 +1,170 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import { VirtuosoHandle } from 'react-virtuoso';
+import { supabase } from '../supabaseClient';
 import { 
   fetchConversations, 
   fetchMessages, 
   subscribeToConversations, 
   subscribeToMessages, 
-  updateMessagesReadStatus,
-  searchConversationsByMessageContent
+  updateMessagesReadStatus
 } from '../services/conversationService';
-import { Conversacion, Mensaje } from '../types/database';
+import { ConversationListItem, MessageListItem } from '../types/database';
+import { toast } from 'sonner';
 
-export const useChatData = () => {
-  const [conversations, setConversations] = useState<Conversacion[]>([]);
-  const [selectedConversation, setSelectedConversation] = useState<Conversacion | null>(null);
-  const [messages, setMessages] = useState<Mensaje[]>([]);
+const CONVERSATIONS_PER_PAGE = 50;
+const MESSAGES_PER_PAGE = 30;
+
+export const useChatData = (virtuosoRef: React.RefObject<VirtuosoHandle>) => {
+  const [conversations, setConversations] = useState<ConversationListItem[]>([]);
+  const [selectedConversation, setSelectedConversation] = useState<ConversationListItem | null>(null);
+  const [messages, setMessages] = useState<MessageListItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [messageContentConversations, setMessageContentConversations] = useState<Conversacion[]>([]);
-  const [isSearchingMessages, setIsSearchingMessages] = useState(false);
+  
+  const [conversationPage, setConversationPage] = useState(0);
+  const [hasMoreConversations, setHasMoreConversations] = useState(true);
+  const [loadingConversations, setLoadingConversations] = useState(false);
+  
+  const [messagePage, setMessagePage] = useState(0);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  // Función para cargar conversaciones
-  const loadConversations = useCallback(async () => {
-    const conversationsData = await fetchConversations();
-    setConversations(conversationsData);
+  const loadConversations = useCallback(async (page: number) => {
+    setLoadingConversations(true);
+    const fetchedConversations = await fetchConversations(page, CONVERSATIONS_PER_PAGE);
+    
+    if (fetchedConversations.length < CONVERSATIONS_PER_PAGE) {
+        setHasMoreConversations(false);
+    }
+    setConversations(prev => page === 0 ? fetchedConversations : [...prev, ...fetchedConversations]);
+    setLoadingConversations(false);
   }, []);
 
-  // Función para cargar mensajes
-  const loadMessages = useCallback(async (conversationId: number) => {
-    const messagesData = await fetchMessages(conversationId);
-    setMessages(messagesData);
-  }, []);
-
-  // Cargar conversaciones al inicio y suscribirse
+  // Carga inicial
   useEffect(() => {
-    loadConversations();
-    const subscription = subscribeToConversations(loadConversations);
-    return () => {
-      subscription.unsubscribe();
-    };
+    loadConversations(0);
   }, [loadConversations]);
 
-  // Cargar mensajes y manejar estado "leído" al seleccionar conversación
-  useEffect(() => {
-    if (selectedConversation) {
-      loadMessages(selectedConversation.id);
+  const loadMoreConversations = useCallback(() => {
+    const nextPage = conversationPage + 1;
+    if (!loadingConversations && hasMoreConversations) {
+        loadConversations(nextPage);
+        setConversationPage(nextPage);
+    }
+  }, [loadingConversations, hasMoreConversations, conversationPage, loadConversations]);
+
+  const handleConversationSelected = useCallback(async (conversation: ConversationListItem | null) => {
+    setSelectedConversation(null);
+    setMessages([]);
+    setMessagePage(0);
+    setHasMoreMessages(true);
+
+    if (conversation) {
+      setLoadingMessages(true);
+      const initialMessages = await fetchMessages(conversation.id, 0, MESSAGES_PER_PAGE);
       
-      if (selectedConversation.tiene_no_leidos) {
-        setConversations(prevConversations => 
-          prevConversations.map(conv => 
-            conv.id === selectedConversation.id 
-              ? { ...conv, tiene_no_leidos: false, no_leidos_count: 0 } 
-              : conv
+      setMessages(initialMessages);
+      if (initialMessages.length < MESSAGES_PER_PAGE) {
+        setHasMoreMessages(false);
+      }
+      setLoadingMessages(false);
+      setSelectedConversation(conversation);
+
+      if (conversation.tiene_no_leidos) {
+        await updateMessagesReadStatus(conversation.id, true);
+        setConversations(prev => 
+          prev.map(c => 
+            c.id === conversation.id ? { ...c, no_leidos_count: 0, tiene_no_leidos: false } : c
           )
         );
-        
-        updateMessagesReadStatus(selectedConversation.id, true)
-          .then(success => {
-            if (!success) {
-              console.error('Error al marcar mensajes como leídos, revertiendo...');
-              loadConversations(); // Revertir en caso de error
-            }
-          });
       }
-      
-      const subscription = subscribeToMessages(
-        selectedConversation.id,
-        () => loadMessages(selectedConversation.id)
-      );
+    }
+  }, []);
+
+  const loadMoreMessages = useCallback(async () => {
+    if (loadingMessages || !hasMoreMessages || !selectedConversation) return;
+
+    setLoadingMessages(true);
+    const nextPage = messagePage + 1;
+    const olderMessages = await fetchMessages(selectedConversation.id, nextPage, MESSAGES_PER_PAGE);
+
+    if (olderMessages.length < MESSAGES_PER_PAGE) {
+      setHasMoreMessages(false);
+    }
+
+    setMessages(prev => [...olderMessages, ...prev]);
+    setMessagePage(nextPage);
+    setLoadingMessages(false);
+  }, [loadingMessages, hasMoreMessages, selectedConversation, messagePage]);
+
+  // Suscripción a cambios en conversaciones
+  useEffect(() => {
+    const handleInsert = (payload: RealtimePostgresChangesPayload<ConversationListItem>) => {
+      const newItem = payload.new as ConversationListItem;
+      if (newItem.id) {
+        setConversations(prev => [newItem, ...prev.filter(item => item.id !== newItem.id)]);
+      }
+    };
+    const handleUpdate = (payload: RealtimePostgresChangesPayload<ConversationListItem>) => {
+      const updatedItem = payload.new as ConversationListItem;
+      if (updatedItem.id) {
+        setConversations(prev => prev.map(c => c.id === updatedItem.id ? updatedItem : c));
+      }
+    };
+    const handleDelete = (payload: RealtimePostgresChangesPayload<{ id: string }>) => {
+      const oldItem = payload.old;
+      if (oldItem && 'id' in oldItem) {
+        setConversations(prev => prev.filter(item => item.id !== oldItem.id));
+      }
+    };
+    
+    const conversationSubscription = subscribeToConversations(handleInsert, handleUpdate, handleDelete);
+    return () => {
+      conversationSubscription.unsubscribe();
+    };
+  }, []);
+  
+  useEffect(() => {
+    if (selectedConversation) {
+      const messageSubscription = subscribeToMessages(selectedConversation.id, async () => {
+        const refreshedMessages = await fetchMessages(selectedConversation.id, 0, MESSAGES_PER_PAGE);
+        setMessages(refreshedMessages);
+      });
 
       return () => {
-        subscription.unsubscribe();
-      };
-    } else {
-      // Limpiar mensajes si no hay conversación seleccionada
-      setMessages([]);
-    }
-  }, [selectedConversation, loadConversations, loadMessages]);
-
-  // Búsqueda de mensajes con debounce
-  useEffect(() => {
-    const searchTimer = setTimeout(async () => {
-      if (searchTerm && searchTerm.length >= 3) {
-        setIsSearchingMessages(true);
-        try {
-          const matchingConversations = await searchConversationsByMessageContent(searchTerm);
-          setMessageContentConversations(matchingConversations);
-        } catch (error) {
-          console.error("Error buscando mensajes:", error);
-          setMessageContentConversations([]);
-        } finally {
-          setIsSearchingMessages(false);
+        if (messageSubscription && typeof messageSubscription.unsubscribe === 'function') {
+          messageSubscription.unsubscribe();
         }
-      } else {
-        setMessageContentConversations([]);
-      }
-    }, 500); // Debounce de 500ms
-
-    return () => clearTimeout(searchTimer);
-  }, [searchTerm]);
-
-  // Filtrado de conversaciones memoizado
-  const filteredConversations = useMemo(() => {
-    const filteredByBasicInfo = conversations.filter(conv => {
-      if (!searchTerm) return true;
-      const lowerSearchTerm = searchTerm.toLowerCase();
-      const matchContactInfo = conv.nombre_contacto?.toLowerCase().includes(lowerSearchTerm) ||
-        conv.numero.includes(searchTerm);
-      const matchLastMessage = conv.ultimo_mensaje_resumen?.toLowerCase().includes(lowerSearchTerm);
-      return matchContactInfo || matchLastMessage;
-    });
-
-    if (searchTerm.length < 3 || messageContentConversations.length === 0) {
-      return filteredByBasicInfo;
+      };
     }
+  }, [selectedConversation]);
 
-    const combinedResults = [...filteredByBasicInfo];
-    const existingIds = new Set(filteredByBasicInfo.map(conv => conv.id));
-    
-    messageContentConversations.forEach(msgConv => {
-      if (!existingIds.has(msgConv.id)) {
-        combinedResults.push(msgConv);
-        existingIds.add(msgConv.id);
-      }
-    });
-    
-    // Opcional: ordenar resultados combinados (ej: por fecha)
-    combinedResults.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-
-    return combinedResults;
-  }, [conversations, searchTerm, messageContentConversations]);
+  const filteredConversations = useMemo(() => {
+    if (!searchTerm) {
+      return conversations;
+    }
+    return conversations.filter(c => 
+      (c.nombre_contacto || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.numero.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (c.ultimo_mensaje_resumen || '').toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [conversations, searchTerm]);
 
   return {
-    conversations,
+    conversations: filteredConversations,
     selectedConversation,
     messages,
     searchTerm,
-    filteredConversations,
-    isSearchingMessages,
-    messagesContainerRef,
-    setSelectedConversation,
     setSearchTerm,
-    loadConversations,
-    loadMessages,
+    loadingConversations,
+    hasMoreConversations,
+    loadMoreConversations,
+    loadingMessages,
+    hasMoreMessages,
+    loadMoreMessages,
+    isSearching: false,
+    onConversationSelected: handleConversationSelected,
   };
 }; 

@@ -15,12 +15,12 @@ const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/
 interface Conversacion {
   id: number;
   numero: string;
-  resumen: string | null;
+  resumen?: string | null;
   status: string;
   updated_at: string;
-  reactivacion_intentos: number;
-  ultimo_intento_reactivacion: string | null;
-  proximo_seguimiento: string | null;
+  reactivacion_intentos?: number;
+  ultimo_intento_reactivacion?: string | null;
+  proximo_seguimiento?: string | null;
   nombre_contacto: string | null;
   ultimo_mensaje_resumen: string | null;
   tiene_no_leidos: boolean;
@@ -33,7 +33,7 @@ interface Mensaje {
   numero: string;
   mensaje: string;
   fecha: string;
-  nombre: string | null;
+  nombre?: string | null;
   media_url: string | null;
   leido: boolean;
   conversation_id: number | null;
@@ -199,11 +199,11 @@ const searchConversations = async (keywords: string[], entities: ReturnType<type
     return [];
   }
   
-  let query = supabase.from('conversaciones').select('*');
+  let query = supabase.from('conversaciones').select('id, nombre_contacto, numero, ultimo_mensaje_resumen, updated_at, tiene_no_leidos, no_leidos_count, status');
   
   // Primero buscar por entidades específicas (nombres y números)
   if (entities.nombres.length > 0 || entities.numeros.length > 0) {
-    let filters = [];
+    let filters: string[] = [];
     
     // Filtrar por nombres
     for (const nombre of entities.nombres) {
@@ -221,10 +221,10 @@ const searchConversations = async (keywords: string[], entities: ReturnType<type
   } 
   // Si no hay entidades específicas, buscar por palabras clave
   else if (keywords.length > 0) {
-    let filters = [];
+    let filters: string[] = [];
     
     for (const keyword of keywords) {
-      filters.push(`nombre_contacto.ilike.%${keyword}%,numero.ilike.%${keyword}%,resumen.ilike.%${keyword}%,ultimo_mensaje_resumen.ilike.%${keyword}%`);
+      filters.push(`nombre_contacto.ilike.%${keyword}%,numero.ilike.%${keyword}%,ultimo_mensaje_resumen.ilike.%${keyword}%`);
     }
     
     if (filters.length > 0) {
@@ -253,7 +253,7 @@ const searchMessages = async (keywords: string[], entities: ReturnType<typeof ex
     return [];
   }
   
-  let query = supabase.from('mensajes').select('*');
+  let query = supabase.from('mensajes').select('conversation_id, tipo, fecha, mensaje, media_url, leido, numero');
   let hasFilter = false;
   
   // Filtrar por entidades específicas si existen
@@ -459,7 +459,7 @@ const sendMessageToGemini = async (messages: {role: 'user' | 'assistant', conten
     const geminiMessages: GeminiMessage[] = [];
     
     // Analizar la última consulta del usuario para obtener contexto específico
-    const lastUserMessage = messages.findLast(msg => msg.role === 'user');
+    const lastUserMessage = [...messages].reverse().find(msg => msg.role === 'user');
     let contextualizedDBContext = "";
     
     if (lastUserMessage) {
@@ -502,82 +502,70 @@ Respuesta: "El último mensaje de María fue: 'Necesito los documentos para mañ
     // Agregar los mensajes de la conversación
     messages.forEach(msg => {
       geminiMessages.push({
-        role: msg.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: msg.content }]
+        role: msg.role,
+        parts: [{ text: msg.content }],
       });
     });
-    
-    const requestBody: GeminiRequest = {
+
+    // Crear la solicitud para Gemini
+    const geminiRequest: GeminiRequest = {
       contents: geminiMessages,
       generationConfig: {
-        temperature: 0.7,
-        topP: 0.95,
+        temperature: 0.6,
+        topP: 0.9,
         topK: 40,
-        maxOutputTokens: 2048
-      }
+        maxOutputTokens: 1024,
+      },
     };
-    
-    // Llamar a la API de Gemini
+
     const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestBody)
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(geminiRequest),
     });
-    
+
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Error en la API de Gemini: ${response.status} ${errorText}`);
+      throw new Error(`Error con API de Gemini: ${response.statusText}`);
     }
-    
-    const data = await response.json() as GeminiResponse;
-    
-    if (!data.candidates || data.candidates.length === 0) {
-      throw new Error('No se recibió respuesta de Gemini');
-    }
-    
-    return data.candidates[0].content.parts[0].text;
+
+    const data: GeminiResponse = await response.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || "No se recibió respuesta de Gemini.";
   } catch (error) {
-    console.error("Error enviando mensaje a Gemini:", error);
-    return "Lo siento, ocurrió un error al procesar tu solicitud. Por favor intenta de nuevo más tarde.";
+    console.error("Error al enviar mensaje a Gemini:", error);
+    return `Error: ${error.message}`;
   }
 };
 
-// Endpoint principal
+
+// Servidor principal que maneja las solicitudes
 serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: { 
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    } });
+  }
+  
   try {
-    // Verificar método
-    if (req.method !== 'POST') {
-      return new Response(JSON.stringify({ error: 'Método no permitido' }), {
-        headers: { 'Content-Type': 'application/json' },
-        status: 405,
-      });
-    }
-    
-    // Parsear cuerpo de la solicitud
     const { messages } = await req.json();
-    
-    if (!messages || !Array.isArray(messages)) {
-      return new Response(JSON.stringify({ error: 'Formato de solicitud inválido' }), {
-        headers: { 'Content-Type': 'application/json' },
+
+    if (!messages) {
+      return new Response(JSON.stringify({ error: "No se proporcionaron mensajes" }), {
         status: 400,
+        headers: { 'Content-Type': 'application/json' },
       });
     }
     
-    // Obtener respuesta de Gemini
-    const response = await sendMessageToGemini(messages);
-    
-    // Retornar respuesta
-    return new Response(JSON.stringify({ response }), {
+    const dbSchema = getDatabaseSchema();
+    const assistantReply = await sendMessageToGemini(messages, dbSchema);
+
+    return new Response(JSON.stringify({ reply: assistantReply }), {
       headers: { 'Content-Type': 'application/json' },
-      status: 200,
     });
   } catch (error) {
-    console.error('Error procesando solicitud:', error);
     return new Response(JSON.stringify({ error: error.message }), {
-      headers: { 'Content-Type': 'application/json' },
       status: 500,
+      headers: { 'Content-Type': 'application/json' },
     });
   }
 }); 

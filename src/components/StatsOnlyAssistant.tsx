@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { X, DollarSign, Clock, BarChart2, MessageSquare, Database } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../supabaseClient';
 
 interface StatsOnlyAssistantProps {
   onClose: () => void;
@@ -52,7 +52,12 @@ const StatsOnlyAssistant = ({ onClose }: StatsOnlyAssistantProps) => {
       }
       
       if (mensajesData && mensajesData.length > 0) {
-        const ultimoId = mensajesData[0].id;
+        const ultimoId = parseInt(mensajesData[0].id, 10);
+        if (isNaN(ultimoId)) {
+          console.error('El ID no es un número válido:', mensajesData[0].id);
+          setLoading(false);
+          return;
+        }
         
         // 2. Calcular mensajes automatizados (ID / 2)
         const mensajesAutomatizados = Math.floor(ultimoId / 2);

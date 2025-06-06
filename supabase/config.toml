@@ -1,9 +1,8 @@
 # Configuración de proyectos para Supabase CLI
-project_id = ""
+project_id = "gbmtgnajixjzolfutpkr"
 
 [api]
 port = 54321
-schemes = ["http", "https"]
 extra_search_path = ["extensions"]
 max_rows = 1000
 
