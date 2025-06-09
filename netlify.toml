@@ -5,19 +5,4 @@
 [[redirects]]
   from = "/*"
   to = "/index.html"
-  status = 200
-
-// [[redirects]]
-//   from = "/api/finance-conciliation"
-//   to = "/.netlify/functions/finance-conciliation"
-//   status = 200
-//
-// [[edge_functions]]
-//   path = "/api/gemini"
-//   function = "gemini"
-//
-// [functions]
-//   directory = "netlify/functions"
-//   node_bundler = "esbuild"
-//   external_node_modules = ["formidable", "busboy"]
-//   included_files = ["**/*.js"] 
+  status = 200 
