@@ -1,16 +1,16 @@
-functionsDirectory = "/Users/mac/Documents/Novai_/novai_cenyca/project_CENYCA V2/netlify/functions"
+functionsDirectory = "/Users/mac/Documents/Novai_/novai_cenyca/project_CENYCA_V2/netlify/functions"
 functionsDirectoryOrigin = "config"
 redirectsOrigin = "config"
 plugins = []
 headers = []
 
 [build]
-edge_functions = "/Users/mac/Documents/Novai_/novai_cenyca/project_CENYCA V2/netlify/edge-functions"
-publish = "/Users/mac/Documents/Novai_/novai_cenyca/project_CENYCA V2/dist"
+edge_functions = "/Users/mac/Documents/Novai_/novai_cenyca/project_CENYCA_V2/netlify/edge-functions"
+publish = "/Users/mac/Documents/Novai_/novai_cenyca/project_CENYCA_V2/dist"
 publishOrigin = "config"
 commandOrigin = "config"
 command = "npm run build"
-functions = "/Users/mac/Documents/Novai_/novai_cenyca/project_CENYCA V2/netlify/functions"
+functions = "/Users/mac/Documents/Novai_/novai_cenyca/project_CENYCA_V2/netlify/functions"
 
 [build.environment]
 
