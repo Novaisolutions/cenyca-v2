@@ -2,6 +2,7 @@ import React from 'react';
 import { ConversationListItem } from '../types/database';
 import ConversationList from './ConversationList';
 import { Search } from 'lucide-react';
+import QuickAccess from './QuickAccess';
 
 interface SidePanelProps {
   displayItems: ConversationListItem[];
@@ -38,6 +39,7 @@ const SidePanel: React.FC<SidePanelProps> = ({
           />
         </div>
       </div>
+      <QuickAccess />
       <div className="flex-grow overflow-y-auto">
         <ConversationList
           items={displayItems}
